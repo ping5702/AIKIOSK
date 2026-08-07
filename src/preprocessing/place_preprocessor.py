@@ -3,8 +3,8 @@ from typing import Dict, List
 
 import pandas as pd
 
-# 추후 실제 데이터가 CSV(또는 유사 포맷)로 입력될 예정. 최소 컬럼 요구사항만 정의해둔다.
-REQUIRED_COLUMNS = ["id", "name", "category", "description", "location", "hours"]
+# 최소 컬럼 요구사항만 정의해둔다. hours/phone은 데이터에 따라 없을 수 있어 선택 항목으로 둔다.
+REQUIRED_COLUMNS = ["id", "name", "category", "description", "location"]
 
 
 def load_places(csv_path: Path) -> pd.DataFrame:
