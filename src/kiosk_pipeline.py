@@ -1,4 +1,6 @@
 import winsound
+from pathlib import Path
+from typing import Optional
 
 import requests
 
@@ -34,13 +36,25 @@ class KioskPipeline:
         results = self.retriever.search(query)
         return self.answer_generator.generate(query, results)
 
-    def speak(self, text: str) -> None:
-        print(text)
+    def synthesize_to_file(self, text: str) -> Optional[Path]:
+        """답변을 음성으로 합성해 파일로 저장하고 그 경로를 반환한다.
+        TTS 서버에 연결할 수 없으면 None을 반환한다 (재생은 호출한 쪽이 결정)."""
         try:
             audio_bytes = self.tts_client.synthesize(text)
-            config.AUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-            config.AUDIO_OUTPUT_PATH.write_bytes(audio_bytes)
-            print(f"(음성 저장됨: {config.AUDIO_OUTPUT_PATH})")
-            winsound.PlaySound(str(config.AUDIO_OUTPUT_PATH), winsound.SND_FILENAME)
         except requests.exceptions.RequestException:
+            return None
+
+        config.AUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        config.AUDIO_OUTPUT_PATH.write_bytes(audio_bytes)
+        return config.AUDIO_OUTPUT_PATH
+
+    def speak(self, text: str) -> None:
+        """CLI 스크립트용: 답변을 출력하고, 합성한 음성을 서버 스피커로 바로 재생한다."""
+        print(text)
+        audio_path = self.synthesize_to_file(text)
+        if audio_path is None:
             print("(TTS 서버에 연결할 수 없어 텍스트만 출력합니다)")
+            return
+
+        print(f"(음성 저장됨: {audio_path})")
+        winsound.PlaySound(str(audio_path), winsound.SND_FILENAME)

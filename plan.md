@@ -102,6 +102,29 @@ AI안내 키오스크 작업계획
          있었음 → mic_test.py에 디버그용 저장(data/audio/last_mic_recording.wav)과
          녹음 길이 출력을 추가해 원인 진단 중
 
+7. 간단한 Web/GUI 화면 구현 (완료 — 버튼 방식)
+    1. `gradio`로 [app.py](app.py) 작성: 🎙️ 말하기 버튼 → 대화 내역(gr.Chatbot) +
+       상태 텍스트("듣는 중..." → "인식 중..." → "답변 생성 중..." → "완료") +
+       답변 음성 자동 재생(gr.Audio, autoplay). generator 함수로 단계별 진행
+       상태를 yield하며 UI를 실시간 갱신
+    2. src/kiosk_pipeline.py에 synthesize_to_file(text) 추가: 웹 UI는 서버
+       스피커(winsound)로 재생할 필요 없이 브라우저가 재생하므로, 파일 경로만
+       반환하는 메서드를 분리 (speak()는 이 메서드를 내부적으로 사용)
+    3. **트러블슈팅**: gradio 설치 후(사실은 무관하게 우연히 같은 시점에) torch
+       import가 `OSError: [WinError 4551]`로 막힘 → 원인은 Windows 11의
+       **Smart App Control**이 서명되지 않은 torch\lib\shm.dll을 새로 차단한 것
+       (이벤트 뷰어 Microsoft-Windows-CodeIntegrity/Operational 로그의 Event ID
+       3077/3118로 확인). 설정 > 개인정보 및 보안 > Windows 보안 > 앱 및 브라우저
+       컨트롤에서 Smart App Control을 꺼서 해결 (주의: 한번 끄면 재설치 없이는
+       다시 켤 수 없는 단방향 설정이라 사용자가 직접 끔)
+    4. 실행: `python app.py` → http://127.0.0.1:7860 접속. 서버 기동/HTTP 응답은
+       확인했으나, 실제 마이크 버튼 클릭 테스트는 사용자가 직접 확인 필요
+       (에이전트는 마이크 입력을 시뮬레이션할 수 없음)
+    5. 다음 단계(미구현): "상시 대기" 모드 — 버튼 없이 백그라운드 스레드가 계속
+       VAD로 마이크를 감시하다 발화 감지 시 자동으로 파이프라인 실행. TTS 재생
+       중에는 이 백그라운드 감시를 일시정지해야 함(AEC 없이 자기 목소리를
+       다시 듣는 문제 방지)
+
 ## 추후 개발 예정 아직 구현 하지 말것
 7. DeepHearing SDK로 실시간 마이크 입력 연동하기 → 위 4번 문의 결과 나온 뒤 진행
 
