@@ -22,7 +22,11 @@ class KioskPipeline:
         self.encoder = BiEncoder(config.EMBEDDING_MODEL_NAME)
         self.store = FaissPlaceStore.load(config.FAISS_INDEX_PATH, config.METADATA_PATH)
         self.retriever = PlaceRetriever(
-            self.encoder, self.store, top_k=config.TOP_K, min_similarity=config.MIN_SIMILARITY
+            self.encoder,
+            self.store,
+            top_k=config.TOP_K,
+            min_similarity=config.MIN_SIMILARITY,
+            bm25_weight=config.BM25_WEIGHT,
         )
         self.llm_client = OllamaClient(model=config.LLM_MODEL_NAME, host=config.OLLAMA_HOST)
         self.answer_generator = AnswerGenerator(self.llm_client)

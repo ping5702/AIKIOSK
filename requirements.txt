@@ -7,7 +7,9 @@ requests
 librosa
 soundfile
 sounddevice
-# webrtcvad는 Windows용 사전빌드가 없어 MSVC 컴파일러가 필요함.
-# webrtcvad-wheels는 동일한 webrtcvad 모듈을 Windows wheel로 제공하는 포크.
-webrtcvad-wheels
 gradio
+# VAD: webrtcvad(에너지 기반, 노이즈에 약함) 대신 신경망 기반 Silero VAD로 교체
+silero-vad
+torchaudio
+# RAG: 장소명/호수 등 정확한 키워드 매칭을 보완하는 BM25 하이브리드 검색
+rank-bm25

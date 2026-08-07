@@ -28,6 +28,10 @@ TOP_K = 3
 # (코사인 유사도 기준: 실제 관련 질문은 0.48~0.6, 무관한 질문은 0.13~0.24로 관측됨)
 MIN_SIMILARITY = 0.35
 
+# 하이브리드 검색에서 BM25(키워드) 점수의 비중. 나머지(1-BM25_WEIGHT)는
+# BiEncoder 벡터 유사도(dense_score)에 배정된다.
+BM25_WEIGHT = 0.3
+
 # 검색된 장소 정보를 바탕으로 자연어 답변을 생성하는 로컬 LLM (Ollama)
 LLM_MODEL_NAME = "qwen2.5:3b"
 OLLAMA_HOST = "http://localhost:11434"

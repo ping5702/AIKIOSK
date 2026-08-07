@@ -69,11 +69,13 @@ AI안내 키오스크 작업계획
        DeepHearing 쪽에 Windows 네이티브 연동 경로가 있는지 별도 문의 필요
     5. VAD(Voice Activity Detection) 구현 완료 — DeepHearing과 무관하게 먼저
        진행 가능한 부분이라 일반 마이크로 우선 구현
-       - webrtcvad는 Windows용 사전빌드 wheel이 없어 MSVC 컴파일러가 필요함
-         → 동일 모듈을 Windows wheel로 제공하는 `webrtcvad-wheels` 포크 사용
-       - src/stt/vad_recorder.py: `sounddevice`로 마이크 입력을 16kHz mono로 캡처,
-         webrtcvad로 30ms 프레임 단위 발화 감지. 말이 시작되면 녹음 시작, 이후
-         1초(무음 프레임 33개) 연속 무음이면 자동으로 녹음 종료
+       - 최초 구현은 webrtcvad(에너지 기반)였으나(Windows 사전빌드 없어 대체
+         `webrtcvad-wheels` 포크 사용), 노이즈 환경에서 발화 구간이 잘못 잘려
+         whisper가 환각을 일으키는 문제가 있어 **Silero VAD(신경망 기반)로 교체**
+         (아래 8번 항목 참고)
+       - src/stt/vad_recorder.py: `sounddevice`로 마이크 입력을 16kHz mono, 512
+         샘플(32ms) 단위로 캡처, Silero VAD로 발화 감지. 말이 시작되면 녹음 시작,
+         이후 1초 연속 무음이면 자동으로 녹음 종료
        - src/stt/whisper_stt.py에 transcribe_array 추가: 파일 저장 없이 VAD가 뽑은
          numpy 배열을 바로 STT에 전달 가능하도록 리팩터링 (transcribe()는 이제
          transcribe_array()를 호출하는 얇은 래퍼)
@@ -124,6 +126,37 @@ AI안내 키오스크 작업계획
        VAD로 마이크를 감시하다 발화 감지 시 자동으로 파이프라인 실행. TTS 재생
        중에는 이 백그라운드 감시를 일시정지해야 함(AEC 없이 자기 목소리를
        다시 듣는 문제 방지)
+
+8. 성능 최적화 검토 및 일부 적용 (STT/VAD, RAG 개선 완료 — LLM 엔진 교체는 보류)
+    1. "온프리미스 성능 극대화" 제안(faster-whisper, Silero VAD, BM25 하이브리드+
+       Reranker, Ollama→vLLM+FlashAttention-2)을 검토한 결과:
+       - **Silero VAD, BM25 하이브리드**: 우리 상황에 실제로 맞아서 적용(아래)
+       - **faster-whisper**: 효과는 있으나 SungBeom/whisper-small-ko를 ct2
+         포맷으로 변환하는 단계가 추가로 필요해서 보류
+       - **Reranker(bge-m3 등)**: 지금 데이터가 8건뿐이라 FAISS가 이미 전수
+         비교(brute-force) 중이라 정확도 개선 효과가 없고, 모델을 하나 더
+         돌리는 거라 지연시간엔 오히려 마이너스 → 데이터 늘어난 뒤 재검토
+       - **vLLM + FlashAttention-2**: vLLM의 PagedAttention/Continuous batching은
+         "동시 다중 사용자 서빙"을 위한 기술인데 우리는 키오스크 1대·순차 요청
+         구조라 해당 문제가 없음. 게다가 둘 다 CUDA GPU 전제 기술인데 우리는
+         VRAM 2GB라 Ollama도 결국 CPU로 돌렸던 것과 같은 벽에 부딫힘 → 적용 안 함
+         (양자화는 이미 Qwen2.5 3B가 Q4_K_M으로 서빙 중이라 별도 조치 불필요)
+    2. **Silero VAD로 교체 완료**: src/stt/vad_recorder.py가 `silero-vad`
+       패키지의 `load_silero_vad()` 모델을 직접 호출해 청크(512 샘플)별 발화
+       확률을 구하는 방식으로 재작성. webrtcvad보다 노이즈 환경에서 더 정확할
+       것으로 기대(신경망 기반) — 실사용 노이즈 환경 검증은 사용자가 직접 필요
+    3. **BM25 하이브리드 검색 추가 완료**: src/rag/bm25_index.py(`rank-bm25` 사용).
+       한글은 조사가 붙어서("3층에") 공백 토큰화만으로는 "3층"과 매칭이 안 되는
+       문제가 있어, 2글자 초과 단어는 글자 단위 bigram으로 쪼개는 자체 토크나이저
+       사용 (형태소 분석기 없이 간단하게 해결)
+       - src/rag/retriever.py: 벡터 유사도(dense)와 BM25 점수를 `(1-w)*dense +
+         w*bm25` 로 결합(기본 w=0.3, config.BM25_WEIGHT). "관련 없음" 판단은
+         BM25 영향 없이 dense_score만으로 유지(BM25는 키워드 하나만 겹쳐도 점수를
+         주기 때문에 무관 질문 필터링 기준으로는 부적합)
+       - **개선 확인**: "3층에 있는 시설을 알려줘" 질의가 하이브리드 적용 전엔
+         무관한 "종합 안내데스크"를 1위로 반환했는데, 적용 후 정확히
+         "대회의실 A"(위치: 3층 301호)를 1위로 반환하도록 개선됨 (실제 회귀
+         테스트로 확인)
 
 ## 추후 개발 예정 아직 구현 하지 말것
 7. DeepHearing SDK로 실시간 마이크 입력 연동하기 → 위 4번 문의 결과 나온 뒤 진행
