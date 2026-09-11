@@ -9,7 +9,7 @@ WORKDIR /app/melotts
 
 # CPU 전용 torch를 먼저 설치해서, melotts 설치 시 불필요한 GPU(CUDA) 의존성
 # (nvidia-cublas-cu12 등 수백MB~수GB)가 딸려오는 것을 방지한다.
-RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
 
 # melotts의 requirements.txt를 그대로 pip이 풀게 하면 cached_path -> boto3/
 # google-cloud-storage 조합에서 수십 분씩 backtracking에 빠진다(둘 다 실제로는 안 씀,
@@ -51,8 +51,20 @@ RUN pip install --no-cache-dir \
 RUN pip install --no-cache-dir "boto3==1.34.162" "google-cloud-storage==2.18.2"
 
 RUN python -m unidic download
-# 한국어만 미리 받아 이미지 레이어에 캐싱 (전체 언어 다운로드하는 init_downloads.py 대신)
-RUN python -c "from melo.api import TTS; TTS(language='KR', device='cpu')"
+# 한국어만 미리 받아 이미지 레이어에 캐싱 (전체 언어 다운로드하는 init_downloads.py 대신).
+# TTS(...) 생성자만 호출하면 메인 합성 모델만 받아지고, 실제 합성(tts_to_file) 때
+# 지연 로딩되는 보조 BERT 모델(kykim/bert-kor-base)은 안 받아진다 - 반드시 실제로
+# 한 번 합성까지 해봐야 그 모델과 관련 pip 의존성까지 전부 이미지에 캐싱된다.
+RUN python -c "\
+from melo.api import TTS; \
+model = TTS(language='KR', device='cpu'); \
+speaker_id = model.hps.data.spk2id['KR']; \
+model.tts_to_file('안녕하세요.', speaker_id, '/tmp/warmup.wav', speed=1.0)"
+
+# 모델은 위 단계에서 이미 캐시됐다. 이 시점부터 HF_HUB_OFFLINE=1을 켜야, 컨테이너가
+# 실행될 때마다 server.py의 TTS(...) 생성자가 매번 HuggingFace Hub에 최신 버전인지
+# 확인하러 나가서 느려지거나(오프라인 환경에서는 멈추는) 문제를 막을 수 있다.
+ENV HF_HUB_OFFLINE=1
 
 RUN pip install --no-cache-dir flask
 

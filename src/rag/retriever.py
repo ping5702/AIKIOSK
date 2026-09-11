@@ -2,6 +2,7 @@ from typing import Dict, List, Tuple
 
 from src.embedding.bi_encoder import BiEncoder
 from src.rag.bm25_index import Bm25Index
+from src.rag.place_name_corrector import PlaceNameCorrector
 from src.vectorstore.faiss_store import FaissPlaceStore
 
 
@@ -27,8 +28,14 @@ class PlaceRetriever:
         self.min_similarity = min_similarity
         self.bm25_weight = bm25_weight
         self.bm25_index = Bm25Index(store.metadata)
+        self.name_corrector = PlaceNameCorrector(r.get("name", "") for r in store.metadata)
 
     def search(self, query: str) -> List[Dict]:
+        # STT가 발음이 비슷한 다른 글자로 잘못 인식한 장소명(예: "해장실" -> "회장실")을
+        # 알려진 장소명 목록 기준으로 미리 보정해, 임베딩/키워드 검색 둘 다 정확한 이름으로
+        # 매칭되게 한다.
+        query = self.name_corrector.correct(query)
+
         dense_scores = self._dense_scores(query)
         bm25_scores = self.bm25_index.scores(query)
         max_bm25 = max(bm25_scores) if bm25_scores and max(bm25_scores) > 0 else 1.0
@@ -39,10 +46,14 @@ class PlaceRetriever:
             combined_score = (1 - self.bm25_weight) * dense_score + self.bm25_weight * normalized_bm25
             combined.append((record, dense_score, combined_score))
 
-        # "관련 없음" 판단은 의미 기반 유사도(dense_score)만으로 한다 — BM25는
-        # 키워드가 하나만 겹쳐도 점수를 주기 때문에, 무관한 질문까지 걸러내는
-        # 기준으로 쓰기엔 부적합하다.
-        relevant = [(record, combined_score) for record, dense_score, combined_score in combined if dense_score >= self.min_similarity]
+        # "관련 없음" 판단 기준을 combined_score로 하되, min_similarity를 (1 - bm25_weight)만큼
+        # 낮춰서 비교한다. combined_score = (1-w)*dense + w*bm25이므로, dense_score만으로
+        # 통과하던 기존 케이스는 이 조정된 기준에서도 항상 그대로 통과한다(dense >= min_similarity
+        # 이면 (1-w)*dense >= (1-w)*min_similarity가 항상 성립). 그 위에 BM25 키워드/음절
+        # 매칭이 강한 경우(예: STT 오인식으로 dense_score는 낮지만 자모/음절이 비슷한 경우)를
+        # 추가로 구제할 수 있게 된다.
+        adjusted_threshold = self.min_similarity * (1 - self.bm25_weight)
+        relevant = [(record, combined_score) for record, dense_score, combined_score in combined if combined_score >= adjusted_threshold]
         relevant.sort(key=lambda item: item[1], reverse=True)
         top = relevant[: self.top_k]
 

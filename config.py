@@ -41,6 +41,10 @@ TTS_SERVER_HOST = "http://localhost:8890"
 AUDIO_OUTPUT_DIR = DATA_DIR / "audio"
 AUDIO_OUTPUT_PATH = AUDIO_OUTPUT_DIR / "answer.wav"
 
+# 답변 생성(RAG+LLM) 중 재생할 대기 안내음. generate_waiting_audio.py로 미리 만들어둔다.
+WAITING_MESSAGE = "잠시만 기다려주세요. 응답을 생성중입니다."
+WAITING_AUDIO_PATH = AUDIO_OUTPUT_DIR / "waiting.wav"
+
 # 질문 음성을 텍스트로 변환하는 STT 모델 (한국어 파인튜닝된 Whisper-small)
 STT_MODEL_NAME = "SungBeom/whisper-small-ko"
 STT_DEVICE = "cpu"

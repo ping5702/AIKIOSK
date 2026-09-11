@@ -29,10 +29,13 @@ def main():
         print(f"(녹음 길이: {duration:.2f}초, 저장됨: {DEBUG_RECORDING_PATH})")
 
         text = stt.transcribe_array(audio, 16000)
-        print(f"[인식 결과] {text}")
+        corrected = pipeline.correct_query(text)
+        if corrected != text:
+            print(f"[인식 결과] {text}  ->  [보정됨] {corrected}")
+        else:
+            print(f"[인식 결과] {text}")
 
-        answer = pipeline.answer(text)
-        pipeline.speak(answer)
+        pipeline.answer_and_speak(corrected)
 
 
 if __name__ == "__main__":

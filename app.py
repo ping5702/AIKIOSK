@@ -19,18 +19,25 @@ def speak_turn(history):
         yield history, "음성이 감지되지 않았습니다. 다시 눌러주세요.", None
         return
 
-    yield history, "인식 중...", None
-    text = stt.transcribe_array(audio, 16000)
-    history = history + [{"role": "user", "content": text}]
-    yield history, "답변 생성 중...", None
+    # STT(수 초 소요)를 시작하기 전에 대기음부터 재생해야, 사용자가 말을 마친
+    # 직후 바로 반응이 온다. STT+RAG+LLM+TTS 전체가 끝날 때까지 반복 재생한다.
+    waiting_audio = str(config.WAITING_AUDIO_PATH) if config.WAITING_AUDIO_PATH.exists() else None
+    yield history, "인식 중...", gr.Audio(value=waiting_audio, autoplay=True, loop=True)
 
-    answer = pipeline.answer(text)
+    text = stt.transcribe_array(audio, 16000)
+    corrected = pipeline.correct_query(text)
+    display_text = text if corrected == text else f"{text} → (보정됨) {corrected}"
+    history = history + [{"role": "user", "content": display_text}]
+    yield history, "답변 생성 중...", gr.Audio(value=waiting_audio, autoplay=True, loop=True)
+
+    answer = pipeline.answer(corrected)
     history = history + [{"role": "assistant", "content": answer}]
-    yield history, "음성 합성 중...", None
+    yield history, "음성 합성 중...", gr.Audio(value=waiting_audio, autoplay=True, loop=True)
 
     audio_path = pipeline.synthesize_to_file(answer)
-    status = "완료" if audio_path else "TTS 서버에 연결할 수 없어 텍스트만 표시합니다."
-    yield history, status, (str(audio_path) if audio_path else None)
+    status = "완료" if audio_path else "TTS 서버에 연결할 수 없어 텍스트만 표시합니다 (TTS 컨테이너가 켜져 있는지 확인하세요)."
+    final_audio = gr.Audio(value=str(audio_path) if audio_path else None, autoplay=True, loop=False)
+    yield history, status, final_audio
 
 
 with gr.Blocks(title="AI 안내 키오스크") as demo:
@@ -47,4 +54,4 @@ with gr.Blocks(title="AI 안내 키오스크") as demo:
     )
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(footer_links=[])

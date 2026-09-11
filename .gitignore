@@ -7,3 +7,10 @@ __pycache__/
 # 빌드로 재생성되는 인덱스/오디오 (원본은 data/raw/에 유지)
 data/index/
 data/audio/
+
+# 발표/데모 자료 (저장소에 포함하지 않음)
+*.pptx
+*.docx
+*.mp4
+*.m4a
+*.vrew
