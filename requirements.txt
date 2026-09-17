@@ -1,15 +1,18 @@
-pandas
-numpy
-sentence-transformers
-faiss-cpu
-torch
-requests
-librosa
-soundfile
-sounddevice
-gradio
+pandas==3.0.5
+numpy==2.5.2
+sentence-transformers==6.0.0
+faiss-cpu==1.15.0
+torch==2.13.0
+# STT(whisper_stt.py)가 transformers.pipeline을 직접 사용한다. sentence-transformers가
+# 이미 끌고 오지만, 직접 import하므로 버전을 명시적으로 고정해둔다.
+transformers==5.15.1
+requests==2.34.2
+librosa==1.0.0
+soundfile==0.14.0
+sounddevice==0.5.6
+gradio==6.25.0
 # VAD: webrtcvad(에너지 기반, 노이즈에 약함) 대신 신경망 기반 Silero VAD로 교체
-silero-vad
-torchaudio
+silero-vad==6.2.1
+torchaudio==2.11.0
 # RAG: 장소명/호수 등 정확한 키워드 매칭을 보완하는 BM25 하이브리드 검색
-rank-bm25
+rank-bm25==0.2.2
