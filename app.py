@@ -1,6 +1,11 @@
+# config를 다른 어떤 import보다도 먼저 실행해야 한다. huggingface_hub는 HF_HUB_OFFLINE
+# 환경변수를 자기가 처음 import되는 순간에 딱 한 번만 읽어 상수로 고정하는데, gradio가
+# huggingface_hub를 딸려서 import하기 때문에 순서가 바뀌면 config.py의
+# os.environ.setdefault("HF_HUB_OFFLINE", "1")가 이미 늦어버려 오프라인 모드가 적용되지
+# 않는다(gradio를 먼저 import했을 때 실제로 재현/확인된 문제).
+import config
 import gradio as gr
 
-import config
 from src.kiosk_pipeline import KioskPipeline
 from src.stt.vad_recorder import VadRecorder
 from src.stt.whisper_stt import WhisperSTT

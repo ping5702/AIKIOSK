@@ -21,12 +21,14 @@ class PlaceRetriever:
         top_k: int = 3,
         min_similarity: float = 0.0,
         bm25_weight: float = 0.3,
+        tie_margin: float = 0.05,
     ):
         self.encoder = encoder
         self.store = store
         self.top_k = top_k
         self.min_similarity = min_similarity
         self.bm25_weight = bm25_weight
+        self.tie_margin = tie_margin
         self.bm25_index = Bm25Index(store.metadata)
         self.name_corrector = PlaceNameCorrector(r.get("name", "") for r in store.metadata)
 
@@ -55,6 +57,19 @@ class PlaceRetriever:
         adjusted_threshold = self.min_similarity * (1 - self.bm25_weight)
         relevant = [(record, combined_score) for record, dense_score, combined_score in combined if combined_score >= adjusted_threshold]
         relevant.sort(key=lambda item: item[1], reverse=True)
+
+        # LLM에게 1~3위를 전부 근거로 넘기면, 3B급 소형 모델이 검색 순위를 무시하고
+        # 사용자 문구와 글자만 우연히 비슷한 하위 순위 후보를 골라버리는 문제가 실측으로
+        # 확인됐다(예: "에이텍 모빌리티 대표이사" 1위(4층)를 두고 이름이 우연히 더
+        # 비슷한 "대표이사실" 2위(3층)를 선택). 프롬프트로 순위를 지키라고 지시해도
+        # 소형 모델은 안정적으로 따르지 않아서, 애초에 1위와 점수 차이가 큰(=경쟁이 안 되는)
+        # 후보는 LLM에 보여주지 않는다. 반대로 "경영지원실(3층)"/"경영지원실(5층)"처럼
+        # 점수가 거의 동률인 진짜 동명이인 장소는 tie_margin 이내라 그대로 함께 넘어가서
+        # LLM이 둘 다 안내할 수 있다.
+        if relevant:
+            best_score = relevant[0][1]
+            relevant = [item for item in relevant if best_score - item[1] <= self.tie_margin]
+
         top = relevant[: self.top_k]
 
         return [self._to_result(record, score) for record, score in top]

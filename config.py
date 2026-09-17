@@ -32,9 +32,19 @@ MIN_SIMILARITY = 0.35
 # BiEncoder 벡터 유사도(dense_score)에 배정된다.
 BM25_WEIGHT = 0.3
 
+# 1위 결과와 점수 차이가 이 값 이내인 후보만 LLM에게 함께 넘긴다. LLM(3B급)이
+# 검색 순위를 무시하고 사용자 문구와 이름이 우연히 더 비슷한 하위 순위 후보를
+# 골라버리는 문제가 있어, 진짜 동점(동명이인 장소)만 남기고 나머지는 코드
+# 단계에서 미리 제거한다.
+TIE_MARGIN = 0.05
+
 # 검색된 장소 정보를 바탕으로 자연어 답변을 생성하는 로컬 LLM (Ollama)
 LLM_MODEL_NAME = "qwen2.5:3b"
-OLLAMA_HOST = "http://localhost:11434"
+# 기본 포트 11434가 Windows(Hyper-V/WSL2, Docker Desktop이 네트워크를 재구성할 때 동적으로
+# 예약하는 포트 제외 범위)와 충돌해 "bind: 액세스가 거부되었습니다" 에러가 나는 문제가
+# 실제로 발생해서, 충돌 없는 포트로 옮겼다. Ollama 쪽도 OLLAMA_HOST 환경변수를
+# 127.0.0.1:11999로 맞춰뒀다(영구 환경변수로 설정함).
+OLLAMA_HOST = "http://localhost:11999"
 
 # 답변을 음성으로 합성하는 로컬 TTS 서버 (별도 .venv-tts에서 실행되는 tts_server/server.py)
 TTS_SERVER_HOST = "http://localhost:8890"
@@ -47,5 +57,5 @@ WAITING_AUDIO_PATH = AUDIO_OUTPUT_DIR / "waiting.wav"
 
 # 질문 음성을 텍스트로 변환하는 STT 모델 (한국어 파인튜닝된 Whisper-small)
 STT_MODEL_NAME = "SungBeom/whisper-small-ko"
-STT_DEVICE = "cpu"
+STT_DEVICE = "cpu"  # "cpu" 또는 "cuda"
 STT_TEST_AUDIO_PATH = AUDIO_OUTPUT_DIR / "stt_test_input.wav"

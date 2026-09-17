@@ -10,6 +10,22 @@ _JONGSUNG = ["", "ㄱ", "ㄲ", "ㄳ", "ㄴ", "ㄵ", "ㄶ", "ㄷ", "ㄹ", "ㄺ", 
 
 _QUALIFIER_PATTERN = re.compile(r"\s*\([^)]*\)\s*$")
 
+# CSV의 여러 장소명에 공통으로 붙는 회사명 접두어. 더 구체적인(긴) 접두어를 먼저
+# 검사해야 "에이텍 모빌리티 XXX"에서 "에이텍"만 떼고 "모빌리티 XXX"가 남는 걸 방지한다.
+_COMPANY_PREFIXES = ("에이텍 모빌리티", "에이텍 오토", "에이텍 컴퓨터", "에이텍")
+
+
+def _strip_company_prefix(name: str) -> Optional[str]:
+    """"에이텍 회장실", "에이텍 모빌리티 대표이사"처럼 앞에 붙은 회사명을 뗀 나머지를
+    반환한다(뗄 접두어가 없거나 나머지가 없으면 None). 이 접두어까지 포함한 전체
+    문자열로만 비교하면, 사용자가 회사명 없이 짧게 말한 질문(예: "회장실 어디야")이
+    그만큼 자모 길이가 길어진 후보 쪽에 불리하게 작용한다."""
+    for prefix in _COMPANY_PREFIXES:
+        if name.startswith(prefix + " "):
+            remainder = name[len(prefix):].strip()
+            return remainder or None
+    return None
+
 
 def _decompose_with_index(text: str) -> Tuple[List[str], List[int]]:
     """텍스트를 자모(초성/중성/종성) 시퀀스로 분해한다. 각 자모가 원문의 몇 번째
@@ -69,12 +85,25 @@ class PlaceNameCorrector:
         seen = set()
         for name in place_names:
             core = _strip_qualifier(name)
-            if not core or core in seen:
+            if not core:
                 continue
-            seen.add(core)
-            core_jamo, _ = _decompose_with_index(core)
-            if core_jamo:
-                self._candidates.append((core, core_jamo))
+            # "대표이사 / AFC사업부"처럼 "/"로 여러 개념이 합쳐진 이름을 통째로 한 후보로
+            # 넣으면, 합쳐진 만큼 자모 길이(n)가 길어져서 상대거리 계산에서 불리해진다
+            # (실제로 이 후보가 전혀 무관한 짧은 후보("랩실")에게 밀리는 버그로 확인됨).
+            # "/" 기준으로 쪼개 각각을 독립된 후보로 등록해, 서로 경쟁에서 불이익을 받지
+            # 않게 한다.
+            for part in core.split("/"):
+                part = part.strip()
+                if not part:
+                    continue
+                # 회사명 접두어를 포함한 원본과, 뗀 나머지 둘 다 후보로 등록한다.
+                for candidate_text in filter(None, (part, _strip_company_prefix(part))):
+                    if candidate_text in seen:
+                        continue
+                    seen.add(candidate_text)
+                    candidate_jamo, _ = _decompose_with_index(candidate_text)
+                    if candidate_jamo:
+                        self._candidates.append((candidate_text, candidate_jamo))
 
     def correct(self, text: str) -> str:
         if not text or not self._candidates:
